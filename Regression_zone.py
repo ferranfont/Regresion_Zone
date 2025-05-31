@@ -12,6 +12,7 @@ from scipy.stats import norm
 import webbrowser
 
 # ===========   LECTURA DE DATOS ==========
+fecha = '2025-01-08'  # Fecha a estudiar
 directorio = '../DATA'
 nombre_fichero = 'export_es_2015_formatted.csv'
 ruta_completa = os.path.join(directorio, nombre_fichero)
@@ -20,25 +21,25 @@ if 'Date' in df.columns:
     df['Date'] = pd.to_datetime(df['Date'], utc=True)
     df.set_index('Date', inplace=True)
 df.index = df.index.tz_convert('Europe/Madrid')
-fecha = '2023-10-05'
 START_DATE = pd.Timestamp(fecha, tz='Europe/Madrid')
 END_DATE = pd.Timestamp(fecha, tz='Europe/Madrid')
 df = df[(df.index.date >= START_DATE.date()) & (df.index.date <= END_DATE.date())]
 
-# === Picos y Valles ===
+# =========== BUSQUEDA DE PICOS Y VALLES ===========
 df_picos, df_valles = pv.encontrar_picos_valles(df, prominence=1, top_n=15)
 
 # --- Rango principal para regresión
 hora_inicio = '07:50:00'
-apertura_mercado = '15:30:00'
-hora_fin = '16:30:00'
+apertura_mercado = '15:30:00'  # OPEN RANGE MARKET START
+hora_fin = '16:30:00'          # OPEN RANGE MARKET
 apertura_mercado = datetime.strptime(apertura_mercado, '%H:%M:%S').time()
 hora_inicio = datetime.strptime(hora_inicio, '%H:%M:%S').time()
 hora_fin = datetime.strptime(hora_fin, '%H:%M:%S').time()
 mask_main = (df.index.time >= hora_inicio) & (df.index.time <= hora_fin)
 
 # --- Rango para proyección futura
-hora_future = time(20, 0)
+hora_future = '20:00:00'
+hora_future = datetime.strptime(hora_future, '%H:%M:%S').time()
 dt_future = pd.Timestamp.combine(START_DATE.date(), hora_future).tz_localize('Europe/Madrid')
 
 # --- Regresión sobre picos
@@ -90,14 +91,11 @@ html_path = chartreg.plotly_regresion_chart(
     apertura_mercado, hora_fin,
     START_DATE
 )
-
-import webbrowser
 webbrowser.open('file://' + os.path.realpath(html_path))
 
-
 # =================== MATPLOTLIB TRANSPUESTO (desde 15:00) ===================
-
-hora_inicio_plt = time(15, 0)
+hora_inicio_plt = '15:00:00'
+hora_inicio_plt = datetime.strptime(hora_inicio_plt, '%H:%M:%S').time()
 dt_start_plt = pd.Timestamp.combine(START_DATE.date(), hora_inicio_plt).tz_localize('Europe/Madrid')
 
 # Filtra solo los datos y regresiones desde la hora de inicio
