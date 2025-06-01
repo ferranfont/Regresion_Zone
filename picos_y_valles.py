@@ -1,40 +1,43 @@
-import numpy as np
-import pandas as pd
 from scipy import signal
+import pandas as pd
+import numpy as np
+import os
+from sklearn.linear_model import LinearRegression
 
-def encontrar_picos_valles(df, prominence=1, top_n=15):
-    """
-    Encuentra los picos (usando 'High') y valles (usando 'Low') más prominentes de un DataFrame OHLC.
-    
-    Args:
-        df (pd.DataFrame): DataFrame con columnas 'High' y 'Low', y el índice como fechas.
-        prominence (float): Prominencia mínima para considerar un pico/valle.
-        top_n (int): Número de picos/valles más prominentes a devolver.
-        
-    Returns:
-        df_picos (pd.DataFrame): DataFrame con fecha y precio de los picos ('High').
-        df_valles (pd.DataFrame): DataFrame con fecha y precio de los valles ('Low').
-    """
-    # --- Picos usando High ---
+def encontrar_picos_valles(df, prominence=1, distance=5):
+    # Usa los índices del df original tal cual, respeta la zona horaria.
     highs = df['High'].values
-    picos, props_picos = signal.find_peaks(highs, prominence=prominence)
-    if len(picos) > 0:
-        top_picos = picos[np.argsort(props_picos['prominences'])[-top_n:]]
-        fechas_picos = df.index[top_picos]
-        valores_picos = highs[top_picos]
-        df_picos = pd.DataFrame({'fecha': fechas_picos, 'precio': valores_picos}).sort_values('fecha').reset_index(drop=True)
-    else:
-        df_picos = pd.DataFrame(columns=['fecha', 'precio'])
+    picos, _ = signal.find_peaks(highs, prominence=prominence, distance=distance)
+    fechas_picos = df.index[picos]
+    df_picos = pd.DataFrame({'fecha': fechas_picos, 'precio': highs[picos]})
 
-    # --- Valles usando Low ---
     lows = df['Low'].values
-    valles, props_valles = signal.find_peaks(-lows, prominence=prominence)
-    if len(valles) > 0:
-        top_valles = valles[np.argsort(props_valles['prominences'])[-top_n:]]
-        fechas_valles = df.index[top_valles]
-        valores_valles = lows[top_valles]
-        df_valles = pd.DataFrame({'fecha': fechas_valles, 'precio': valores_valles}).sort_values('fecha').reset_index(drop=True)
-    else:
-        df_valles = pd.DataFrame(columns=['fecha', 'precio'])
+    valles, _ = signal.find_peaks(-lows, prominence=prominence, distance=distance)
+    fechas_valles = df.index[valles]
+    df_valles = pd.DataFrame({'fecha': fechas_valles, 'precio': lows[valles]})
+
+    # Calcular media y desviación típica
+    mean_picos = np.mean(highs)
+    std_picos = np.std(highs)
+    mean_valles = np.mean(lows)
+    std_valles = np.std(lows)
+
+    df_picos['sigma'] = ((df_picos['precio'] - mean_picos) / std_picos).round(1) if std_picos > 0 else 0
+    df_valles['sigma'] = ((df_valles['precio'] - mean_valles) / std_valles).round(1) if std_valles > 0 else 0
+
+    # Calcular regresión para picos
+    X_picos = (df_picos['fecha'].astype(np.int64) // 10**9).values.reshape(-1, 1)
+    reg_picos = LinearRegression().fit(X_picos, df_picos['precio'].values)
+    df_picos['regresion'] = reg_picos.predict(X_picos).round(2)
+
+    # Calcular regresión para valles
+    X_valles = (df_valles['fecha'].astype(np.int64) // 10**9).values.reshape(-1, 1)
+    reg_valles = LinearRegression().fit(X_valles, df_valles['precio'].values)
+    df_valles['regresion'] = reg_valles.predict(X_valles).round(2)
+
+    # Guardar CSVs
+    os.makedirs("outputs", exist_ok=True)
+    df_picos.to_csv("outputs/picos.csv", index=False, date_format='%Y-%m-%d %H:%M:%S%z')
+    df_valles.to_csv("outputs/valles.csv", index=False, date_format='%Y-%m-%d %H:%M:%S%z')
 
     return df_picos, df_valles

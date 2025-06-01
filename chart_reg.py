@@ -7,10 +7,12 @@ import numpy as np
 
 def plotly_regresion_chart(
     df_plot, df_picos, df_valles,
-    fechas_solid, y_solid_picos, y_solid_valles,
+    fechas_solid_picos, y_solid_picos,
+    fechas_solid_valles, y_solid_valles,
     fechas_dash, y_dash_picos, y_dash_valles,
     mask_picos_plot, mask_valles_plot,
     apertura_mercado, hora_fin,
+    hora_inicio_picos, hora_inicio_valles,
     START_DATE
 ):
     chart_dir = 'charts'
@@ -24,7 +26,6 @@ def plotly_regresion_chart(
         shared_xaxes=True,
         row_heights=[0.80, 0.20],
         vertical_spacing=0.03,
-        # subplot_titles=(f'Regresiones – {fecha_str}', 'Volumen')
     )
 
     # === PRECIO ===
@@ -43,17 +44,19 @@ def plotly_regresion_chart(
         mode='markers', name='Valles (Low)', marker=dict(color='red', size=8, symbol='circle')
     ), row=1, col=1)
 
-    # === LÍNEAS DE REGRESIÓN ===
+    # === LÍNEAS DE REGRESIÓN (PICOS) ===
     fig.add_trace(go.Scatter(
-        x=fechas_solid, y=y_solid_picos, mode='lines',
+        x=fechas_solid_picos, y=y_solid_picos, mode='lines',
         name='Recta Picos', line=dict(color='green', width=1)
     ), row=1, col=1)
     fig.add_trace(go.Scatter(
         x=fechas_dash, y=y_dash_picos, mode='lines',
         name='Recta Picos Extensión', line=dict(color='green', width=1, dash='dash')
     ), row=1, col=1)
+
+    # === LÍNEAS DE REGRESIÓN (VALLES) ===
     fig.add_trace(go.Scatter(
-        x=fechas_solid, y=y_solid_valles, mode='lines',
+        x=fechas_solid_valles, y=y_solid_valles, mode='lines',
         name='Recta Valles', line=dict(color='red', width=1)
     ), row=1, col=1)
     fig.add_trace(go.Scatter(
@@ -62,17 +65,24 @@ def plotly_regresion_chart(
     ), row=1, col=1)
 
     # === RELLENO ENTRE REGRESIONES (solo entre 15:30 y 16:30) ===
+    # === RELLENO ENTRE REGRESIONES (solo entre apertura_mercado y hora_fin) ===
     dt_rango_1 = pd.Timestamp.combine(START_DATE.date(), apertura_mercado).tz_localize('Europe/Madrid')
     dt_rango_2 = pd.Timestamp.combine(START_DATE.date(), hora_fin).tz_localize('Europe/Madrid')
-    idx_1 = np.argmin(np.abs(fechas_solid - dt_rango_1))
-    idx_2 = np.argmin(np.abs(fechas_solid - dt_rango_2))
+
+    # Busca los índices más cercanos en cada curva
+    idx_1_picos = np.argmin(np.abs(fechas_solid_picos - dt_rango_1))
+    idx_2_picos = np.argmin(np.abs(fechas_solid_picos - dt_rango_2))
+    idx_1_valles = np.argmin(np.abs(fechas_solid_valles - dt_rango_1))
+    idx_2_valles = np.argmin(np.abs(fechas_solid_valles - dt_rango_2))
+
+    # Polígono entre regresiones
     x_polygon = [
-        fechas_solid[idx_1], fechas_solid[idx_2], fechas_solid[idx_2],
-        fechas_solid[idx_1], fechas_solid[idx_1]
+        fechas_solid_valles[idx_1_valles], fechas_solid_valles[idx_2_valles],
+        fechas_solid_picos[idx_2_picos], fechas_solid_picos[idx_1_picos], fechas_solid_valles[idx_1_valles]
     ]
     y_polygon = [
-        y_solid_valles[idx_1], y_solid_valles[idx_2],
-        y_solid_picos[idx_2], y_solid_picos[idx_1], y_solid_valles[idx_1]
+        y_solid_valles[idx_1_valles], y_solid_valles[idx_2_valles],
+        y_solid_picos[idx_2_picos], y_solid_picos[idx_1_picos], y_solid_valles[idx_1_valles]
     ]
     fig.add_trace(go.Scatter(
         x=x_polygon,
@@ -85,7 +95,7 @@ def plotly_regresion_chart(
         name='Zona entre regresiones'
     ), row=1, col=1)
 
-    # === RELLENO VERDE PASTEL/ROJO PASTEL ===
+    # === RELLENO VERDE/ROJO PASTEL ===
     df_dash = pd.DataFrame({'fecha': fechas_dash, 'regresion': y_dash_picos})
     df_dash.set_index('fecha', inplace=True)
     df_price_dash = df_plot[df_plot.index.isin(fechas_dash)]
@@ -96,7 +106,7 @@ def plotly_regresion_chart(
         y_fill = list(df_above['Close']) + list(df_above['regresion'][::-1])
         fig.add_trace(go.Scatter(
             x=x_fill, y=y_fill, fill='toself',
-            fillcolor='rgba(152, 251, 152, 0.3)',  # PaleGreen
+            fillcolor='rgba(152, 251, 152, 0.3)',
             line=dict(color='rgba(0,0,0,0)'),
             hoverinfo='skip',
             name='Precio > Regresión Picos',
@@ -113,7 +123,7 @@ def plotly_regresion_chart(
         y_fill_below = list(df_below['Close']) + list(df_below['regresion'][::-1])
         fig.add_trace(go.Scatter(
             x=x_fill_below, y=y_fill_below, fill='toself',
-            fillcolor='rgba(255, 160, 160, 0.3)',  # Rojo pastel
+            fillcolor='rgba(255, 160, 160, 0.3)',
             line=dict(color='rgba(0,0,0,0)'),
             hoverinfo='skip',
             name='Precio < Regresión Valles',
@@ -125,13 +135,19 @@ def plotly_regresion_chart(
         fig.add_trace(go.Bar(
             x=df_plot.index,
             y=df_plot['Volumen'],
-            marker_color='rgba(40,100,255,0.7)',  # Azul translúcido
-            opacity=0.5,
+            marker_color='blue',
+            opacity=0.99,
             name='Volumen'
         ), row=2, col=1)
 
     # === LÍNEAS VERTICALES HORARIAS ===
-    for h in ['07:50:00', '15:30:00', '16:30:00', '20:00:00']:
+    hora_inicio_picos_str = hora_inicio_picos.strftime('%H:%M:%S') if hasattr(hora_inicio_picos, 'strftime') else str(hora_inicio_picos)
+    hora_inicio_valles_str = hora_inicio_valles.strftime('%H:%M:%S') if hasattr(hora_inicio_valles, 'strftime') else str(hora_inicio_valles)
+    apertura_mercado_str = apertura_mercado.strftime('%H:%M:%S') if hasattr(apertura_mercado, 'strftime') else str(apertura_mercado)
+    hora_fin_str = hora_fin.strftime('%H:%M:%S') if hasattr(hora_fin, 'strftime') else str(hora_fin)
+
+    # Añade ambos horarios de inicio para líneas verticales
+    for h in [hora_inicio_picos_str, hora_inicio_valles_str, apertura_mercado_str, '15:30:00', hora_fin_str, '20:00:00']:
         vline_time = datetime.strptime(h, '%H:%M:%S').time()
         vline_stamp = pd.Timestamp.combine(START_DATE.date(), vline_time).tz_localize('Europe/Madrid')
         fig.add_vline(
