@@ -13,7 +13,8 @@ def plotly_regresion_chart(
     mask_picos_plot, mask_valles_plot,
     apertura_mercado, hora_fin,
     hora_inicio_picos, hora_inicio_valles,
-    START_DATE
+    START_DATE,
+    df_trades=None
 ):
     chart_dir = 'charts'
     os.makedirs(chart_dir, exist_ok=True)
@@ -64,18 +65,13 @@ def plotly_regresion_chart(
         name='Recta Valles Extensión', line=dict(color='red', width=1, dash='dash')
     ), row=1, col=1)
 
-    # === RELLENO ENTRE REGRESIONES (solo entre 15:30 y 16:30) ===
     # === RELLENO ENTRE REGRESIONES (solo entre apertura_mercado y hora_fin) ===
     dt_rango_1 = pd.Timestamp.combine(START_DATE.date(), apertura_mercado).tz_localize('Europe/Madrid')
     dt_rango_2 = pd.Timestamp.combine(START_DATE.date(), hora_fin).tz_localize('Europe/Madrid')
-
-    # Busca los índices más cercanos en cada curva
     idx_1_picos = np.argmin(np.abs(fechas_solid_picos - dt_rango_1))
     idx_2_picos = np.argmin(np.abs(fechas_solid_picos - dt_rango_2))
     idx_1_valles = np.argmin(np.abs(fechas_solid_valles - dt_rango_1))
     idx_2_valles = np.argmin(np.abs(fechas_solid_valles - dt_rango_2))
-
-    # Polígono entre regresiones
     x_polygon = [
         fechas_solid_valles[idx_1_valles], fechas_solid_valles[idx_2_valles],
         fechas_solid_picos[idx_2_picos], fechas_solid_picos[idx_1_picos], fechas_solid_valles[idx_1_valles]
@@ -88,47 +84,63 @@ def plotly_regresion_chart(
         x=x_polygon,
         y=y_polygon,
         fill='toself',
-        fillcolor='rgba(135, 206, 250, 0.2)',  # Azul celeste translúcido
+        fillcolor='rgba(135, 206, 250, 0.2)',
         line=dict(color='rgba(0,0,0,0)'),
         hoverinfo='skip',
         showlegend=False,
         name='Zona entre regresiones'
     ), row=1, col=1)
 
-    # === RELLENO VERDE/ROJO PASTEL ===
-    df_dash = pd.DataFrame({'fecha': fechas_dash, 'regresion': y_dash_picos})
-    df_dash.set_index('fecha', inplace=True)
-    df_price_dash = df_plot[df_plot.index.isin(fechas_dash)]
-    df_merged = df_dash.join(df_price_dash[['Close']], how='inner')
-    df_above = df_merged[df_merged['Close'] > df_merged['regresion']]
-    if not df_above.empty:
-        x_fill = list(df_above.index) + list(df_above.index[::-1])
-        y_fill = list(df_above['Close']) + list(df_above['regresion'][::-1])
-        fig.add_trace(go.Scatter(
-            x=x_fill, y=y_fill, fill='toself',
-            fillcolor='rgba(152, 251, 152, 0.3)',
-            line=dict(color='rgba(0,0,0,0)'),
-            hoverinfo='skip',
-            name='Precio > Regresión Picos',
-            showlegend=False
-        ), row=1, col=1)
+    # === ENTRADAS Y SALIDAS DE TRADES (si hay) ===
+    if df_trades is not None and not df_trades.empty:
+        # Normaliza y limpia espacios/tipos
+        df_trades['entry_type'] = df_trades['entry_type'].astype(str).str.strip().str.capitalize()
 
-    df_dash_valles = pd.DataFrame({'fecha': fechas_dash, 'regresion': y_dash_valles})
-    df_dash_valles.set_index('fecha', inplace=True)
-    df_price_dash = df_plot[df_plot.index.isin(fechas_dash)]
-    df_merged_valles = df_dash_valles.join(df_price_dash[['Close']], how='inner')
-    df_below = df_merged_valles[df_merged_valles['Close'] < df_merged_valles['regresion']]
-    if not df_below.empty:
-        x_fill_below = list(df_below.index) + list(df_below.index[::-1])
-        y_fill_below = list(df_below['Close']) + list(df_below['regresion'][::-1])
-        fig.add_trace(go.Scatter(
-            x=x_fill_below, y=y_fill_below, fill='toself',
-            fillcolor='rgba(255, 160, 160, 0.3)',
-            line=dict(color='rgba(0,0,0,0)'),
-            hoverinfo='skip',
-            name='Precio < Regresión Valles',
-            showlegend=False
-        ), row=1, col=1)
+        print('\n--- Test de símbolos que debería dibujar Plotly ---')
+        for idx, row in df_trades.iterrows():
+            entry_type_str = str(row['entry_type']).strip().capitalize()
+            # Debug para ver el tipo
+            if entry_type_str == 'Long':
+                print(f"Fila {idx}: triangle-up VERDE (Long)")
+            elif entry_type_str == 'Short':
+                print(f"Fila {idx}: triangle-down ROJO (Short)")
+            else:
+                print(f"Fila {idx}: SÍMBOLO DEFAULT/GRIS (entry_type='{entry_type_str}')")
+
+            # Entrada
+            if pd.notnull(row['entry_time']) and pd.notnull(row['entry_price']):
+                color = 'limegreen' if entry_type_str == 'Long' else 'red'
+                symbol = 'triangle-up' if entry_type_str == 'Long' else 'triangle-down'
+                fig.add_trace(go.Scatter(
+                    x=[row['entry_time']],
+                    y=[row['entry_price']],
+                    mode='markers',
+                    marker=dict(color=color, size=18, symbol=symbol),
+                    name='Entry'
+                ), row=1, col=1)
+
+            # Salida
+            if pd.notnull(row['exit_time']) and pd.notnull(row['exit_price']):
+                fig.add_trace(go.Scatter(
+                    x=[row['exit_time']],
+                    y=[row['exit_price']],
+                    mode='markers',
+                    marker=dict(color='black', size=14, symbol='x'),
+                    name='Exit'
+                ), row=1, col=1)
+
+            # Línea discontinua de entrada a salida
+            if (
+                pd.notnull(row['entry_time']) and pd.notnull(row['entry_price']) and
+                pd.notnull(row['exit_time']) and pd.notnull(row['exit_price'])
+            ):
+                fig.add_trace(go.Scatter(
+                    x=[row['entry_time'], row['exit_time']],
+                    y=[row['entry_price'], row['exit_price']],
+                    mode='lines',
+                    line=dict(color='gray', width=1, dash='dot'),
+                    name='Entry to Exit'
+                ), row=1, col=1)
 
     # === VOLUMEN SUBPLOT (fila 2) ===
     if 'Volumen' in df_plot.columns:
@@ -146,7 +158,6 @@ def plotly_regresion_chart(
     apertura_mercado_str = apertura_mercado.strftime('%H:%M:%S') if hasattr(apertura_mercado, 'strftime') else str(apertura_mercado)
     hora_fin_str = hora_fin.strftime('%H:%M:%S') if hasattr(hora_fin, 'strftime') else str(hora_fin)
 
-    # Añade ambos horarios de inicio para líneas verticales
     for h in [hora_inicio_picos_str, hora_inicio_valles_str, apertura_mercado_str, '15:30:00', hora_fin_str, '20:00:00']:
         vline_time = datetime.strptime(h, '%H:%M:%S').time()
         vline_stamp = pd.Timestamp.combine(START_DATE.date(), vline_time).tz_localize('Europe/Madrid')

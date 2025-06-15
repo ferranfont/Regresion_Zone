@@ -98,7 +98,9 @@ df_plot = df[mask_full]
 mask_picos_plot = (df_picos['fecha'] >= dt_start_picos) & (df_picos['fecha'] <= dt_proj)
 mask_valles_plot = (df_valles['fecha'] >= dt_start_valles) & (df_valles['fecha'] <= dt_proj)
 
-# =================== ORDER MANAGMENT REGRESION ===================
+# ... Tu código anterior para cargar datos y calcular regresiones ...
+
+# =================== ORDER MANAGEMENT REGRESION ===================
 df_trades = omr.order_management_reg(
     df,
     df_picos,
@@ -107,20 +109,54 @@ df_trades = omr.order_management_reg(
     reg_valles,
     hora_fin,
     outlier_sigma=0.1,
-    stop_points=10,
-    target_points=10
+    stop_points=6,
+    target_points=10,
+    num_pos=2
 )
 
+if not df_trades.empty:
+    # Renombra columnas para que sean las que espera el chart
+    df_trades = df_trades.rename(columns={
+        'tipo': 'entry_type',
+        'fecha_entrada': 'entry_time',
+        'precio_entrada': 'entry_price',
+        'regresion': 'regression',
+        'diferencia': 'diff'
+    })
+
+    # Limpia cualquier cosa rara: normaliza compra/venta, y cualquier Long/Short con espacios o saltos
+    def normalize_entry_type(val):
+        v = str(val).strip().lower()
+        if v == 'compra':
+            return 'Long'
+        elif v == 'venta':
+            return 'Short'
+        elif 'long' in v:
+            return 'Long'
+        elif 'short' in v:
+            return 'Short'
+        else:
+            return ''
+    df_trades['entry_type'] = df_trades['entry_type'].apply(normalize_entry_type)
+
+    print('Valores únicos en entry_type (post-normalización):', df_trades['entry_type'].unique())
+
+
+
 # =================== PLOTLY GRÁFICO INTERACTIVO ===================
+
 html_path = chartreg.plotly_regresion_chart(
     df, df_picos, df_valles,
     fechas_solid_picos, y_solid_picos, fechas_solid_valles, y_solid_valles,
     fechas_dash, y_dash_picos, y_dash_valles,
     mask_picos_plot, mask_valles_plot,
     apertura_mercado, hora_fin, hora_inicio_picos, hora_inicio_valles,
-    START_DATE
+    START_DATE,
+    df_trades  # <--- pásalo directamente, no hace falta leer CSV
 )
+
 webbrowser.open('file://' + os.path.realpath(html_path))
+
 
 
 '''''
