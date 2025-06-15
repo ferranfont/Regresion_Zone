@@ -12,7 +12,7 @@ def plotly_regresion_chart(
     fechas_dash, y_dash_picos, y_dash_valles,
     mask_picos_plot, mask_valles_plot,
     apertura_mercado, hora_fin,
-    hora_inicio_picos, hora_inicio_valles,
+    hora_inicio_picos, hora_inicio_valles, hora_future,
     START_DATE,
     df_trades=None
 ):
@@ -156,9 +156,10 @@ def plotly_regresion_chart(
     hora_inicio_picos_str = hora_inicio_picos.strftime('%H:%M:%S') if hasattr(hora_inicio_picos, 'strftime') else str(hora_inicio_picos)
     hora_inicio_valles_str = hora_inicio_valles.strftime('%H:%M:%S') if hasattr(hora_inicio_valles, 'strftime') else str(hora_inicio_valles)
     apertura_mercado_str = apertura_mercado.strftime('%H:%M:%S') if hasattr(apertura_mercado, 'strftime') else str(apertura_mercado)
+    hora_future_str = hora_future.strftime('%H:%M:%S') if hasattr(hora_future, 'strftime') else str(hora_future)
     hora_fin_str = hora_fin.strftime('%H:%M:%S') if hasattr(hora_fin, 'strftime') else str(hora_fin)
 
-    for h in [hora_inicio_picos_str, hora_inicio_valles_str, apertura_mercado_str, '15:30:00', hora_fin_str, '20:00:00']:
+    for h in [hora_inicio_picos_str, hora_inicio_valles_str, apertura_mercado_str, '15:30:00', hora_fin_str, hora_future_str,'21:45:00']:
         vline_time = datetime.strptime(h, '%H:%M:%S').time()
         vline_stamp = pd.Timestamp.combine(START_DATE.date(), vline_time).tz_localize('Europe/Madrid')
         fig.add_vline(
