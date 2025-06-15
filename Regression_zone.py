@@ -12,14 +12,14 @@ import matplotlib.pyplot as plt
 from scipy.stats import norm
 import webbrowser
 
-fecha = '2024-02-15'                      #fecha a operar
+fecha = '2024-02-13'                      #fecha a operar
 hora_inicio_picos = '11:00:00'            #hora pera empezar el cálculo de los picos
 hora_inicio_valles = '07:30:00'           #hora pera empezar el cálculo de los valles   
 apertura_mercado = '14:30:00'             #hora para empezar a mirar el rango de la pre apertura
 
 hora_fin = '15:30:00'                     #hora inicio trading
-hora_future = '17:00:00'   
-num_posiciones = 2               #hora final trading
+hora_future = '17:30:00'                  #hora final trading
+num_posiciones = 2               
 
 # ===========   LECTURA DE DATOS ==========
 
@@ -102,17 +102,16 @@ mask_valles_plot = (df_valles['fecha'] >= dt_start_valles) & (df_valles['fecha']
 # ... Tu código anterior para cargar datos y calcular regresiones ...
 
 # =================== ORDER MANAGEMENT REGRESION ===================
+
 df_trades = omr.order_management_reg(
-    df,
-    df_picos,
-    df_valles,
-    reg_picos,
-    reg_valles,
+    df, df_picos, df_valles,
+    reg_picos, reg_valles,
     hora_fin,
     outlier_sigma=0.1,
-    stop_points=6,
+    stop_points=10,
     target_points=10,
-    num_pos=num_posiciones
+    num_pos=3,
+    hora_limite_operaciones=hora_future  
 )
 
 if not df_trades.empty:
@@ -185,3 +184,22 @@ pvt.plot_matplotlib_transpuesto(
 )
 
 '''''
+# =================== ORDER MANAGEMENT REGRESION ===================
+
+
+# === Construcción dinámica del nombre del CSV según fecha ===
+
+nombre_archivo = f"trades_final_{fecha}.csv"  # o "trades_fina_" si ese es el nombre correcto
+ruta_csv = os.path.join("outputs", nombre_archivo)
+
+# === Verifica si el archivo existe antes de leerlo ===
+if os.path.exists(ruta_csv):
+    df = pd.read_csv(ruta_csv)
+
+    if 'profit_in_$' in df.columns:
+        suma = df['profit_in_$'].sum()
+        print(f"🏁 Beneficio acumulado total desde CSV: ${suma:.2f}")
+    else:
+        print("❌ La columna 'profit_in_$' no está en el archivo.")
+else:
+    print(f"❌ No se encontró el archivo: {ruta_csv}")

@@ -8,7 +8,8 @@ def order_management_reg(
     outlier_sigma=0.1,
     stop_points=10,
     target_points=10,
-    num_pos=3  # máximo número de posiciones abiertas simultáneamente
+    num_pos=3,
+    hora_limite_operaciones=None
 ):
     trades = []
 
@@ -66,16 +67,13 @@ def order_management_reg(
 
     df_trades = pd.DataFrame(trades)
 
-    # ============ SIMULACIÓN DE SALIDAS ================
     if not df_trades.empty:
-        # Renombrar para procesar en inglés
         df_trades = df_trades.rename(columns={
             'tipo': 'entry_type',
             'fecha_entrada': 'entry_time',
-            'precio_entrada': 'entry_price',
+            'precio_entrada': 'entry_price'
         })
 
-        # Normaliza entry_type: compra/venta -> Long/Short, limpia cualquier texto raro
         def normalize_entry_type(val):
             v = str(val).strip().lower()
             if v == 'compra':
@@ -88,13 +86,13 @@ def order_management_reg(
                 return 'Short'
             else:
                 return ''
-        df_trades['entry_type'] = df_trades['entry_type'].apply(normalize_entry_type)
 
-        # Ordena por fecha de entrada por si acaso
+        df_trades['entry_type'] = df_trades['entry_type'].apply(normalize_entry_type)
         df_trades = df_trades.sort_values('entry_time')
 
         results = []
         posiciones_abiertas = []
+
         for idx, row in df_trades.iterrows():
             entry_time = row['entry_time']
             if pd.isnull(entry_time):
@@ -104,9 +102,12 @@ def order_management_reg(
             else:
                 entry_time = pd.to_datetime(entry_time).tz_convert('Europe/Madrid')
 
-            # Cierra posiciones finalizadas para liberar hueco
+            if hora_limite_operaciones and entry_time.time() > hora_limite_operaciones:
+                print(f"⛔ Entrada ignorada por hora: {entry_time.time()} > {hora_limite_operaciones}")
+                continue
+
             posiciones_abiertas = [pos for pos in posiciones_abiertas if entry_time < pos['exit_time']]
-            # Si no se supera el número de posiciones abiertas simultáneamente
+
             if len(posiciones_abiertas) < num_pos:
                 entry_price = row['entry_price']
                 entry_type = row['entry_type']
@@ -148,6 +149,7 @@ def order_management_reg(
                         exit_price = df_future['Close'].iloc[-1]
                         output_tag = 'no_exit'
                     profit_points = exit_price - entry_price
+
                 elif entry_type == 'Short':
                     target_level = entry_price - target
                     stop_level = entry_price + stop
@@ -176,9 +178,8 @@ def order_management_reg(
                         output_tag = 'no_exit'
                     profit_points = entry_price - exit_price
                 else:
-                    continue  # salta operaciones sin tipo válido
+                    continue
 
-                # Forzar timezone si hiciera falta
                 if pd.isnull(exit_time):
                     continue
                 if isinstance(exit_time, pd.Timestamp):
@@ -186,6 +187,7 @@ def order_management_reg(
                         exit_time = exit_time.tz_localize('Europe/Madrid')
                     else:
                         exit_time = exit_time.tz_convert('Europe/Madrid')
+
                 time_in_market = (exit_time - entry_time).total_seconds() / 60
                 profit_usd = profit_points * 50
 
@@ -213,11 +215,10 @@ def order_management_reg(
             total_profit = df_trades_final['profit_in_$'].sum()
             num_winners = (df_trades_final['profit_in_$'] > 0).sum()
             win_rate = num_winners / len(df_trades_final) * 100
-            print(f"🏁 Beneficio acumulado total: ${total_profit:.2f}")
+            print(f"\U0001F3C1 Beneficio acumulado total: ${total_profit:.2f}")
             print(f"✅ Porcentaje de aciertos (beneficio positivo): {win_rate:.1f}% ({num_winners} de {len(df_trades_final)})")
 
             return df_trades_final
 
-    # Si no se generan operaciones:
     print("⚠️ No se generaron operaciones. CSV no creado.")
     return df_trades
