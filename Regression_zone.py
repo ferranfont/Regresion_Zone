@@ -18,7 +18,8 @@ hora_inicio_valles = '07:30:00'           #hora pera empezar el cálculo de los 
 apertura_mercado = '14:30:00'             #hora para empezar a mirar el rango de la pre apertura
 
 hora_fin = '15:30:00'                     #hora inicio trading
-hora_future = '20:00:00'                  #hora final trading
+hora_future = '17:00:00'   
+num_posiciones = 2               #hora final trading
 
 # ===========   LECTURA DE DATOS ==========
 
@@ -111,7 +112,7 @@ df_trades = omr.order_management_reg(
     outlier_sigma=0.1,
     stop_points=6,
     target_points=10,
-    num_pos=2
+    num_pos=num_posiciones
 )
 
 if not df_trades.empty:
